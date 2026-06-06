@@ -1,10 +1,11 @@
-FROM node:alpine AS build
+FROM node:18-alpine
 ARG REACT_APP_ENVIRONMENT
 ENV REACT_APP_ENVIRONMENT=${REACT_APP_ENVIRONMENT}
+ENV HOST=0.0.0.0
+ENV CHOKIDAR_USEPOLLING=true
 WORKDIR /app
-COPY package.json /app/package.json
-RUN npm i
-COPY . /app/
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
 EXPOSE 3000
-RUN npm run build
 CMD ["npm", "start"]
