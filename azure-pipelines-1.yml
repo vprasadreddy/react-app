@@ -1,0 +1,36 @@
+trigger: none
+
+variables:
+  - group: dev-variable-group
+  
+pool: $(agentPoolName)
+
+#Build the applications
+stages:
+- stage: build
+  displayName: build
+  jobs:
+  - job: "build"
+    displayName: build job
+    steps:
+      - script: |
+          if ! command -v node &> /dev/null
+          then
+              echo "node not installed."
+              echo "##vso[task.setvariable variable=isNodeInstalled;isOutput=true]false"
+          else
+              echo "node is installed."
+              echo "##vso[task.setvariable variable=isNodeInstalled;isOutput=true]true"
+          fi
+        displayName: checking if node is installed or not
+        name: Check_Node_Task
+
+      - script: |
+          echo "Is nodejs installed? $(Check_Node_Task.isNodeInstalled)"
+        displayName: "display node installed status"
+      - task: NodeTool@0
+        displayName: "install node"
+        condition: eq(variables['Check_Node_Task.isNodeInstalled'], 'false')
+        inputs:
+          versionSource: "spec"
+          versionSpec: "20.x"
