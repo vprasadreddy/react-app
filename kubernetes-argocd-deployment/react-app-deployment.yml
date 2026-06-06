@@ -16,7 +16,7 @@ spec:
         - name: react-app-container
           image: prasadreddy2349/react-app:latest # Reference public Docker Hub image here
           ports:
-            - containerPort: 80
+            - containerPort: 3000
           env:
             - name: REACT_APP_ENVIRONMENT
               value: "production"
