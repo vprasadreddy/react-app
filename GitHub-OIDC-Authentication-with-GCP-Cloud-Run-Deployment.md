@@ -1,4 +1,3 @@
-````bash
 # GitHub OIDC Authentication with GCP Cloud Run Deployment
 
 This guide walks through the complete setup to deploy a React app from GitHub Actions to Google Cloud Run using Workload Identity Federation (OIDC) instead of service account keys.
@@ -9,7 +8,7 @@ This guide walks through the complete setup to deploy a React app from GitHub Ac
 
 ```bash
 gcloud auth login
-````
+```
 
 2. Set your target project and compute region:
 
@@ -22,20 +21,19 @@ gcloud config set run/region YOUR_REGION
 
 ```bash
 gcloud services enable run.googleapis.com
- gcloud services enable artifactregistry.googleapis.com
+
+gcloud services enable artifactregistry.googleapis.com
+
 gcloud services enable iam.googleapis.com
 ```
 
-## Step 1: Create or choose a Cloud Run runtime service account
+### Step 1. OIDC Setup
 
-Create a dedicated service account for Cloud Run runtime access. This account is used by Cloud Run when your service executes.
+Follow this article on how to setup [GitHub Actions with OIDC](https://medium.com/@prasad.reddy0708/authenticate-to-google-cloud-gcp-from-github-actions-using-oidc-and-workload-identity-federation-2a6c6b56c29f)
 
-```bash
-gcloud iam service-accounts create cloud-run-runtime-sa \
-  --display-name="Cloud Run runtime service account"
-```
+### Step 2. Grant required IAM permissions to Service Account that is created during OIDC setup
 
-Grant it the minimum runtime roles you need. At a minimum, Cloud Run services typically need pull access to Artifact Registry and any other resources your app uses.
+Grant Service Account used with OIDC setup the minimum runtime roles you need. At a minimum, Cloud Run services typically need pull access to Artifact Registry and any other resources your app uses.
 
 ```bash
 gcloud projects add-iam-policy-binding YOUR_GCP_PROJECT_ID \
@@ -44,17 +42,6 @@ gcloud projects add-iam-policy-binding YOUR_GCP_PROJECT_ID \
 ```
 
 If your app needs access to additional GCP services, grant only the roles required for those services.
-
-## Step 2: Create the deployment service account for GitHub Actions
-
-This service account is the identity GitHub Actions will impersonate via OIDC when deploying to Cloud Run.
-
-```bash
-gcloud iam service-accounts create github-actions-deploy-sa \
-  --display-name="GitHub Actions deploy service account"
-```
-
-Grant the deploy service account the following roles:
 
 ```bash
 gcloud projects add-iam-policy-binding YOUR_GCP_PROJECT_ID \
@@ -87,136 +74,28 @@ gcloud artifacts repositories create react-app-repo \
   --description="Docker repo for React app images"
 ```
 
-## Step 4: Create a Workload Identity Pool and provider
-
-A Workload Identity Pool lets GitHub authenticate to GCP using OIDC.
-
-```bash
-gcloud iam workload-identity-pools create github-pool \
-  --project=YOUR_GCP_PROJECT_ID \
-  --location="global" \
-  --display-name="GitHub Actions pool"
-```
-
-Save the pool resource name from the output or build it manually:
-
-```bash
-POOL_ID=github-pool
-POOL_RESOURCE="projects/YOUR_GCP_PROJECT_ID/locations/global/workloadIdentityPools/$POOL_ID"
-```
-
-Create the OIDC provider for GitHub Actions:
-
-```bash
-PROVIDER_ID=github-provider
-gcloud iam workload-identity-pools providers create-oidc $PROVIDER_ID \
-  --project=YOUR_GCP_PROJECT_ID \
-  --location="global" \
-  --workload-identity-pool="$POOL_ID" \
-  --display-name="GitHub Actions OIDC provider" \
-  --issuer-uri="https://token.actions.githubusercontent.com" \
-  --allowed-audiences="https://cloud.google.com/iam" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner,attribute.workflow=assertion.workflow,attribute.ref=assertion.ref"
-```
-
-## Step 5: Allow GitHub to impersonate the deploy service account
-
-Grant the GitHub OIDC identity the `roles/iam.workloadIdentityUser` role on the deployment service account.
-
-```bash
-SA_EMAIL=github-actions-deploy-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com
-POOL_RESOURCE="projects/YOUR_GCP_PROJECT_ID/locations/global/workloadIdentityPools/$POOL_ID"
-PROVIDER_RESOURCE="$POOL_RESOURCE/providers/$PROVIDER_ID"
-
-cat > iam-policy.json <<'EOF'
-{
-  "bindings": [
-    {
-      "role": "roles/iam.workloadIdentityUser",
-      "members": [
-        "principalSet://$PROVIDER_RESOURCE/attribute.repository/OWNER/REPO"
-      ]
-    }
-  ]
-}
-EOF
-
-gcloud iam service-accounts set-iam-policy "$SA_EMAIL" iam-policy.json
-rm iam-policy.json
-```
-
-Replace `OWNER/REPO` with your GitHub repository path, for example `vprasadreddy/react-app`.
-
-> Tip: To restrict the binding to a specific branch, use `principalSet://$PROVIDER_RESOURCE/attribute.repository/OWNER/REPO/attribute.ref/ref:refs/heads/main`.
-
 ## Step 6: Configure GitHub repository secrets
 
-You do not need a service account key when using OIDC. Recommended secrets:
+Recommended secrets:
 
-- `GCP_PROJECT` = `YOUR_GCP_PROJECT_ID`
+- `GCP_PROJECT_ID` = `YOUR_GCP_PROJECT_ID`
 - `GCP_REGION` = `YOUR_REGION`
-- `ARTIFACT_REGISTRY_REPO` = `YOUR_REGION-docker.pkg.dev/YOUR_GCP_PROJECT_ID/react-app-repo`
-- `CLOUD_RUN_SERVICE` = `react-app-service`
-- `GCP_SA_EMAIL` = `github-actions-deploy-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com`
+- `GCP_CLOUD_RUN_SERVICE_NAME` = `YOUR_CLOUD_RUN_SERVICE_NAME`
+- `IMAGE_NAME` = `DOCKER_IMAGE_NAME`
+- `IMAGE_TAG` = `DOCKER_IMAGE_TAG`
+- `ARTIFACT_REPO_NAME` = `YOUR_DOCKER_ARTIFACT_REPOSITORY_NAME`
+- `GCP_SERVICE_ACCOUNT` = `SERVICE_ACCOUNT_EMAIL_USED_WITH_OIDC`
+- `GCP_WORKLOAD_IDENTITY_PROVIDER` = `GCP_WORKLOAD_IDENTITY_PROVIDER_VALUE`
 
-## Step 7: GitHub Actions workflow
+Use below command to get GCP_WORKLOAD_IDENTITY_PROVIDER_VALUE
 
-Create `.github/workflows/deploy-cloud-run.yml`:
-
-```yaml
-name: Deploy to Cloud Run
-
-on:
-  push:
-    branches:
-      - main
-
-permissions:
-  id-token: write
-  contents: read
-
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-
-    env:
-      IMAGE_URI: ${{ secrets.ARTIFACT_REGISTRY_REPO }}/react-app:${{ github.sha }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ secrets.GCP_PROJECT }}
-          service_account_email: ${{ secrets.GCP_SA_EMAIL }}
-          workload_identity_provider: "projects/${{ secrets.GCP_PROJECT }}/locations/global/workloadIdentityPools/$POOL_ID/providers/$PROVIDER_ID"
-          export_default_credentials: true
-
-      - name: Configure Docker for Artifact Registry
-        run: |
-          gcloud auth configure-docker ${{ secrets.ARTIFACT_REGISTRY_REPO }} --quiet
-
-      - name: Build container image
-        run: |
-          docker build -t "$IMAGE_URI" .
-
-      - name: Push image to Artifact Registry
-        run: |
-          docker push "$IMAGE_URI"
-
-      - name: Deploy to Cloud Run
-        run: |
-          gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE }} \
-            --image "$IMAGE_URI" \
-            --region ${{ secrets.GCP_REGION }} \
-            --platform managed \
-            --allow-unauthenticated \
-            --service-account "cloud-run-runtime-sa@${{ secrets.GCP_PROJECT }}.iam.gserviceaccount.com"
+```bash
+gcloud iam workload-identity-pools providers describe GITHUB_OIDC_PROVIDER_NAME \
+    --workload-identity-pool=WORKLOAD_IDENTITY_POOL_NAME \
+    --location=global \
+    --project=GCP_PROJECT_ID \
+    --format="value(name)"
 ```
-
-If you instead prefer Cloud Build, replace the build and push steps with `gcloud builds submit`.
 
 ## Step 8: Cloud Run service configuration
 
@@ -250,10 +129,6 @@ gcloud run services add-iam-policy-binding ${{ secrets.CLOUD_RUN_SERVICE }} \
 - `roles/artifactregistry.writer`
 - `roles/cloudbuild.builds.builder` _(optional, only if using Cloud Build)_
 - `roles/iam.workloadIdentityUser` on the deploy service account for the GitHub OIDC provider
-
-### Cloud Run runtime service account
-
-- `roles/artifactregistry.reader`
 
 ## Troubleshooting
 
