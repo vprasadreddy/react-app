@@ -220,10 +220,16 @@ If you instead prefer Cloud Build, replace the build and push steps with `gcloud
 
 ## Step 8: Cloud Run service configuration
 
-If your React app needs environment variables, add them to the deploy command:
+If your React app needs environment variables, add them to the deploy command.
 
 ```bash
   --set-env-vars "REACT_APP_API_URL=https://api.example.com"
+```
+
+For multiple variables, separate them with commas:
+
+```bash
+  --set-env-vars "REACT_APP_API_URL=https://api.example.com,REACT_APP_FEATURE_FLAG=true,REACT_APP_ANALYTICS_ID=UA-12345678"
 ```
 
 To allow public access to the Cloud Run service:

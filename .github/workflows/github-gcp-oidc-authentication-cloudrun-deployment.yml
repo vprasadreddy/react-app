@@ -78,3 +78,4 @@ jobs:
                   --region ${{ env.REGION }} \
                   --platform managed \
                   --allow-unauthenticated
+                  --set-env-vars "REACT_APP_ENVIRONMENT=Development"
