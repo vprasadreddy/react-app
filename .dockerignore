@@ -10,6 +10,7 @@ Dockerfile
 .gitignore
 firebase.json
 README.md
+.github/
 # .DS_Store files
 *.DS_Store
 *.DS_Store.*
