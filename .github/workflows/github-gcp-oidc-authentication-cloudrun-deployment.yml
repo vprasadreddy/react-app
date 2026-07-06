@@ -70,7 +70,7 @@ jobs:
             - name: Deploy to Cloud Run
               run: |
                   gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_NAME }} \
-                  --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.CLOUD_RUN_SERVICE_NAME }}@${{ github.sha }} \
+                  --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.CLOUD_RUN_SERVICE_NAME }}:${{ github.sha }} \
                   --region ${{ env.REGION }} \
                   --platform managed \
                   --allow-unauthenticated
