@@ -77,5 +77,5 @@ jobs:
                   --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.CLOUD_RUN_SERVICE_NAME }}:${{ env.IMAGE_TAG }} \
                   --region ${{ env.REGION }} \
                   --platform managed \
-                  --allow-unauthenticated
+                  --allow-unauthenticated \
                   --set-env-vars "REACT_APP_ENVIRONMENT=Development"
